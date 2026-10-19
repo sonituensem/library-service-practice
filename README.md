@@ -38,7 +38,7 @@ The API is available below `/api/`.
 
 | Method | Endpoint | Purpose | Access |
 | --- | --- | --- | --- |
-| `POST` | `/api/users/register/` | Register with email, password, and optional first/last name | Public |
+| `POST` | `/api/users/` | Register with email, password, and optional first/last name | Public |
 | `POST` | `/api/users/token/` | Obtain an access and refresh JWT using email and password | Public |
 | `POST` | `/api/users/token/refresh/` | Obtain a new access JWT using a refresh token | Public |
 | `GET` | `/api/users/me/` | Retrieve the authenticated user's profile | JWT |

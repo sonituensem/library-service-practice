@@ -9,7 +9,7 @@ User = get_user_model()
 
 
 class UserRegistrationTests(APITestCase):
-    registration_url = "/api/users/register/"
+    registration_url = "/api/users/"
 
     def test_registers_user_and_never_returns_password(self):
         response = self.client.post(
