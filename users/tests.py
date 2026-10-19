@@ -34,7 +34,7 @@ class UserRegistrationTests(APITestCase):
 
         response = self.client.post(
             self.registration_url,
-            {"email": "reader@example.com", "password": "AnotherPass9#"},
+            {"email": "reader@EXAMPLE.COM", "password": "AnotherPass9#"},
             format="json",
         )
 
@@ -103,6 +103,7 @@ class UserAuthenticationAndProfileTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["email"], self.user.email)
         self.assertEqual(response.data["first_name"], "Alex")
+        self.assertNotIn("password", response.data)
 
     def test_profile_update_changes_only_allowed_fields(self):
         access, _ = self.get_access_token()
@@ -110,14 +111,70 @@ class UserAuthenticationAndProfileTests(APITestCase):
 
         response = self.client.patch(
             self.profile_url,
-            {"first_name": "Sam", "email": "changed@example.com"},
+            {"first_name": "Sam", "is_staff": True},
             format="json",
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.user.refresh_from_db()
         self.assertEqual(self.user.first_name, "Sam")
+        self.assertFalse(self.user.is_staff)
+
+    def test_profile_update_changes_email_and_hashes_new_password(self):
+        access, _ = self.get_access_token()
+        self.client.credentials(HTTP_AUTHORIZE=f"Bearer {access}")
+
+        response = self.client.patch(
+            self.profile_url,
+            {"email": "new@EXAMPLE.COM", "password": "AnotherStrong9#"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertNotIn("password", response.data)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.email, "new@example.com")
+        self.assertTrue(self.user.check_password("AnotherStrong9#"))
+        self.assertFalse(self.user.check_password(self.password))
+
+        self.client.credentials()
+        login_response = self.client.post(
+            self.token_url,
+            {"email": "new@example.com", "password": "AnotherStrong9#"},
+            format="json",
+        )
+        self.assertEqual(login_response.status_code, status.HTTP_200_OK)
+
+    def test_profile_update_rejects_duplicate_email(self):
+        User.objects.create_user("other@example.com", "AnotherStrong9#")
+        access, _ = self.get_access_token()
+        self.client.credentials(HTTP_AUTHORIZE=f"Bearer {access}")
+
+        response = self.client.patch(
+            self.profile_url,
+            {"email": "other@EXAMPLE.COM"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("email", response.data)
+        self.user.refresh_from_db()
         self.assertEqual(self.user.email, "reader@example.com")
+
+    def test_profile_update_rejects_weak_password(self):
+        access, _ = self.get_access_token()
+        self.client.credentials(HTTP_AUTHORIZE=f"Bearer {access}")
+
+        response = self.client.patch(
+            self.profile_url,
+            {"password": "123"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("password", response.data)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password(self.password))
 
     def test_profile_put_updates_the_authenticated_user(self):
         access, _ = self.get_access_token()

@@ -42,7 +42,7 @@ The API is available below `/api/`.
 | `POST` | `/api/users/token/` | Obtain an access and refresh JWT using email and password | Public |
 | `POST` | `/api/users/token/refresh/` | Obtain a new access JWT using a refresh token | Public |
 | `GET` | `/api/users/me/` | Retrieve the authenticated user's profile | JWT |
-| `PUT`, `PATCH` | `/api/users/me/` | Update first or last name | JWT |
+| `PUT`, `PATCH` | `/api/users/me/` | Update email, password, first name, or last name | JWT |
 
 Send the access token in the `Authorize` header using the `Bearer` scheme:
 
@@ -50,7 +50,7 @@ Send the access token in the `Authorize` header using the `Bearer` scheme:
 Authorize: Bearer <access-token>
 ```
 
-Passwords are validated with Django's configured password validators, stored as hashes, and never returned by the API. A user can update their own first and last name; email is read-only after registration.
+Passwords are validated with Django's configured password validators, stored as hashes, and never returned by the API. Users may update their own email, password, first name, and last name. The `is_staff` flag is never editable through these endpoints.
 
 ## Tests and coverage
 
