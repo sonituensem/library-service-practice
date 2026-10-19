@@ -112,13 +112,29 @@ an authorization error for write requests.
 
 | Method | Endpoint | Purpose | Access |
 | --- | --- | --- | --- |
+| `POST` | `/api/borrowings/` | Borrow an available book | JWT |
 | `GET` | `/api/borrowings/` | List visible borrowing records | JWT |
 | `GET` | `/api/borrowings/<id>/` | Retrieve one borrowing with its book details | JWT |
 
+Create a borrowing with `book_id` and `expected_return_date`:
+
+```json
+{
+  "book_id": 1,
+  "expected_return_date": "2026-11-01"
+}
+```
+
+The server sets `borrow_date` to the current local date and assigns the
+authenticated user. The client cannot set the borrower or actual return date.
+If the book has no available copies, the request returns `400 Bad Request` and
+does not create a borrowing. A successful request reserves one copy by
+decrementing the book's `inventory`.
+
 Customers see only their own borrowing records; staff users can see all records.
 Each response includes the borrower id, borrowing dates, and a nested `book`
-object with the book's current inventory information. These endpoints are
-read-only in this task.
+object with the book's current inventory information. Returning a book is
+handled by the selected return task.
 
 ## API documentation
 
