@@ -34,6 +34,16 @@ python manage.py runserver
 
 The API is available below `/api/`.
 
+To create a staff account for the staff-only book write endpoints, run this
+command in a separate terminal and follow the prompts:
+
+```shell
+python manage.py createsuperuser
+```
+
+Registering through the public users API creates a regular customer account;
+it cannot grant staff access.
+
 ## Users API
 
 | Method | Endpoint | Purpose | Access |

@@ -55,6 +55,17 @@ class BookAPITests(APITestCase):
             Decimal(str(response.data["daily_fee"])), Decimal("1.25")
         )
 
+    def test_openapi_marks_public_book_reads_without_authentication(self):
+        response = self.client.get("/api/schema/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        books = response.data["paths"]
+        self.assertNotIn("security", books["/api/books/"]["get"])
+        self.assertNotIn("security", books["/api/books/{id}/"]["get"])
+        self.assertEqual(
+            books["/api/books/"]["post"]["security"], [{"jwtAuth": []}]
+        )
+
     def test_regular_user_can_read_books(self):
         self.authenticate_as(self.reader)
 
