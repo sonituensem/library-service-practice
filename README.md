@@ -16,4 +16,71 @@ The planned tasks cover user registration and JWT authentication, book inventory
 book permissions, and the core borrowing lifecycle. Tests, Swagger documentation,
 test coverage reporting, and a complete README are project-wide requirements.
 
-The API setup and endpoint documentation will be added alongside the implementation.
+The implemented API endpoints and project commands are documented below.
+
+## Local setup
+
+```shell
+python -m venv .venv
+```
+
+Activate the virtual environment, then install dependencies and prepare the database:
+
+```shell
+python -m pip install -r requirements.txt
+python manage.py migrate
+python manage.py runserver
+```
+
+The API is available below `/api/`.
+
+## Users API
+
+| Method | Endpoint | Purpose | Access |
+| --- | --- | --- | --- |
+| `POST` | `/api/users/` | Register with email, password, and optional first/last name | Public |
+| `POST` | `/api/users/token/` | Obtain an access and refresh JWT using email and password | Public |
+| `POST` | `/api/users/token/refresh/` | Obtain a new access JWT using a refresh token | Public |
+| `GET` | `/api/users/me/` | Retrieve the authenticated user's profile | JWT |
+| `PUT`, `PATCH` | `/api/users/me/` | Update email, password, first name, or last name | JWT |
+
+Register with `POST /api/users/` and a JSON body containing `email` and
+`password`. `first_name` and `last_name` are optional:
+
+```json
+{
+  "email": "reader@example.com",
+  "password": "StrongPass9#",
+  "first_name": "Alex",
+  "last_name": "Reader"
+}
+```
+
+The response is `201 Created` with the user's `id`, `email`, `first_name`, and
+`last_name`. To sign in, send `{"email": "reader@example.com", "password":
+"StrongPass9#"}` to `POST /api/users/token/`; the response contains `access`
+and `refresh` tokens. Send `{"refresh": "<refresh-token>"}` to
+`POST /api/users/token/refresh/` to obtain a new `access` token.
+
+Send the access token in the `Authorize` header using the `Bearer` scheme:
+
+```http
+Authorize: Bearer <access-token>
+```
+
+`GET /api/users/me/` returns the current user's profile. Send any of `email`,
+`password`, `first_name`, or `last_name` in a JSON body to
+`PUT /api/users/me/` or `PATCH /api/users/me/` to update it. Both update
+methods accept omitted fields and return the updated profile. Duplicate emails
+and weak passwords return `400 Bad Request` with field errors.
+
+Passwords are validated with Django's configured password validators, stored
+as hashes, and never returned by the API. The `is_staff` flag is never editable
+through these endpoints.
+
+## Tests and coverage
+
+```shell
+coverage run manage.py test
+coverage report
+```
