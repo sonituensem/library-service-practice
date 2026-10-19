@@ -1,19 +1,29 @@
 """Read-only endpoints for customer borrowing records."""
 
-from rest_framework import permissions, viewsets
+from rest_framework import mixins, permissions, viewsets
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from borrowings.models import Borrowing
-from borrowings.serializers import BorrowingReadSerializer
+from borrowings.serializers import BorrowingCreateSerializer, BorrowingReadSerializer
 
 
-class BorrowingViewSet(viewsets.ReadOnlyModelViewSet):
-    """List visible borrowings or retrieve one borrowing by id."""
+class BorrowingViewSet(
+    mixins.CreateModelMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Create borrowing records and read records visible to the current user."""
 
     queryset = Borrowing.objects.select_related("book", "user")
     serializer_class = BorrowingReadSerializer
     authentication_classes = (JWTAuthentication,)
     permission_classes = (permissions.IsAuthenticated,)
+
+    def get_serializer_class(self):
+        if self.action == "create":
+            return BorrowingCreateSerializer
+        return BorrowingReadSerializer
 
     def get_queryset(self):
         queryset = super().get_queryset()
