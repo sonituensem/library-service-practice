@@ -2,11 +2,14 @@
 source =
     users
     books
+    borrowings
 omit =
     users/migrations/*
     users/tests.py
     books/migrations/*
     books/tests.py
+    borrowings/migrations/*
+    borrowings/tests.py
 
 [report]
 fail_under = 60
