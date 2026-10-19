@@ -108,6 +108,18 @@ decimal with two fractional digits. Responses include the book's generated
 requests require a JWT for a staff user; anonymous and non-staff users receive
 an authorization error for write requests.
 
+## Borrowings API
+
+| Method | Endpoint | Purpose | Access |
+| --- | --- | --- | --- |
+| `GET` | `/api/borrowings/` | List visible borrowing records | JWT |
+| `GET` | `/api/borrowings/<id>/` | Retrieve one borrowing with its book details | JWT |
+
+Customers see only their own borrowing records; staff users can see all records.
+Each response includes the borrower id, borrowing dates, and a nested `book`
+object with the book's current inventory information. These endpoints are
+read-only in this task.
+
 ## API documentation
 
 Interactive Swagger UI is available at `/api/docs/` and the OpenAPI schema at
