@@ -1,3 +1,13 @@
 """URL configuration for user registration and authentication endpoints."""
 
-urlpatterns = []
+from django.urls import path
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+
+from users.views import UserProfileView, UserRegistrationView
+
+urlpatterns = [
+    path("register/", UserRegistrationView.as_view(), name="user-register"),
+    path("token/", TokenObtainPairView.as_view(), name="token-obtain-pair"),
+    path("token/refresh/", TokenRefreshView.as_view(), name="token-refresh"),
+    path("me/", UserProfileView.as_view(), name="user-me"),
+]
