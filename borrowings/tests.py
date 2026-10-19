@@ -2,11 +2,12 @@ from django.test import TestCase
 
 """API and model tests for the Borrowings Service."""
 
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -96,12 +97,80 @@ class BorrowingReadAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 2)
 
-    def test_borrowing_endpoints_are_read_only(self):
+    def test_authenticated_user_can_create_borrowing_and_reserve_copy(self):
         self.authenticate_as(self.reader)
 
-        response = self.client.post(self.list_url, {}, format="json")
+        response = self.client.post(
+            self.list_url,
+            {
+                "book_id": self.book.id,
+                "expected_return_date": (timezone.localdate() + timedelta(days=7)).isoformat(),
+                "user": self.other_reader.id,
+                "borrow_date": "2026-01-01",
+                "actual_return_date": "2026-02-01",
+            },
+            format="json",
+        )
 
-        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["user"], self.reader.id)
+        self.assertEqual(response.data["borrow_date"], timezone.localdate().isoformat())
+        self.assertEqual(response.data["book"]["id"], self.book.id)
+        self.assertIsNone(response.data["actual_return_date"])
+        self.book.refresh_from_db()
+        self.assertEqual(self.book.inventory, 1)
+
+    def test_anonymous_user_cannot_create_borrowing(self):
+        response = self.client.post(
+            self.list_url,
+            {
+                "book_id": self.book.id,
+                "expected_return_date": (timezone.localdate() + timedelta(days=7)).isoformat(),
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.book.refresh_from_db()
+        self.assertEqual(self.book.inventory, 2)
+
+    def test_cannot_borrow_book_with_zero_inventory(self):
+        self.book.inventory = 0
+        self.book.save(update_fields=("inventory",))
+        self.authenticate_as(self.reader)
+
+        response = self.client.post(
+            self.list_url,
+            {
+                "book_id": self.book.id,
+                "expected_return_date": (timezone.localdate() + timedelta(days=7)).isoformat(),
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("book_id", response.data)
+        self.assertEqual(Borrowing.objects.count(), 2)
+        self.book.refresh_from_db()
+        self.assertEqual(self.book.inventory, 0)
+
+    def test_expected_return_date_before_borrow_date_is_rejected(self):
+        self.authenticate_as(self.reader)
+
+        response = self.client.post(
+            self.list_url,
+            {
+                "book_id": self.book.id,
+                "expected_return_date": (timezone.localdate() - timedelta(days=1)).isoformat(),
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("expected_return_date", response.data)
+        self.assertEqual(Borrowing.objects.count(), 2)
+        self.book.refresh_from_db()
+        self.assertEqual(self.book.inventory, 2)
 
 
 class BorrowingDateConstraintTests(APITestCase):
