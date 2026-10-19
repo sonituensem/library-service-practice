@@ -44,13 +44,39 @@ The API is available below `/api/`.
 | `GET` | `/api/users/me/` | Retrieve the authenticated user's profile | JWT |
 | `PUT`, `PATCH` | `/api/users/me/` | Update email, password, first name, or last name | JWT |
 
+Register with `POST /api/users/` and a JSON body containing `email` and
+`password`. `first_name` and `last_name` are optional:
+
+```json
+{
+  "email": "reader@example.com",
+  "password": "StrongPass9#",
+  "first_name": "Alex",
+  "last_name": "Reader"
+}
+```
+
+The response is `201 Created` with the user's `id`, `email`, `first_name`, and
+`last_name`. To sign in, send `{"email": "reader@example.com", "password":
+"StrongPass9#"}` to `POST /api/users/token/`; the response contains `access`
+and `refresh` tokens. Send `{"refresh": "<refresh-token>"}` to
+`POST /api/users/token/refresh/` to obtain a new `access` token.
+
 Send the access token in the `Authorize` header using the `Bearer` scheme:
 
 ```http
 Authorize: Bearer <access-token>
 ```
 
-Passwords are validated with Django's configured password validators, stored as hashes, and never returned by the API. Users may update their own email, password, first name, and last name. The `is_staff` flag is never editable through these endpoints.
+`GET /api/users/me/` returns the current user's profile. Send any of `email`,
+`password`, `first_name`, or `last_name` in a JSON body to
+`PUT /api/users/me/` or `PATCH /api/users/me/` to update it. Both update
+methods accept omitted fields and return the updated profile. Duplicate emails
+and weak passwords return `400 Bad Request` with field errors.
+
+Passwords are validated with Django's configured password validators, stored
+as hashes, and never returned by the API. The `is_staff` flag is never editable
+through these endpoints.
 
 ## Tests and coverage
 
