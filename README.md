@@ -115,6 +115,7 @@ an authorization error for write requests.
 | `POST` | `/api/borrowings/` | Borrow an available book | JWT |
 | `GET` | `/api/borrowings/` | List visible borrowing records | JWT |
 | `GET` | `/api/borrowings/<id>/` | Retrieve one borrowing with its book details | JWT |
+| `POST` | `/api/borrowings/<id>/return/` | Return a borrowed book | JWT |
 
 Create a borrowing with `book_id` and `expected_return_date`:
 
@@ -131,10 +132,16 @@ If the book has no available copies, the request returns `400 Bad Request` and
 does not create a borrowing. A successful request reserves one copy by
 decrementing the book's `inventory`.
 
+Return an active borrowing with an empty `POST` request to
+`/api/borrowings/<id>/return/`. The server sets `actual_return_date` to the
+current local date and restores one copy to the book's `inventory`. A borrowing
+cannot be returned twice; a repeated request returns `400 Bad Request` without
+changing the inventory. Customers can return only their own borrowings; staff
+users can return any borrowing.
+
 Customers see only their own borrowing records; staff users can see all records.
 Each response includes the borrower id, borrowing dates, and a nested `book`
-object with the book's current inventory information. Returning a book is
-handled by the selected return task.
+object with the book's current inventory information.
 
 ## API documentation
 
