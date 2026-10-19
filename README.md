@@ -83,10 +83,10 @@ through these endpoints.
 | Method | Endpoint | Purpose | Access |
 | --- | --- | --- | --- |
 | `GET` | `/api/books/` | List all books and their available inventory | Public |
-| `POST` | `/api/books/` | Add a book | JWT |
+| `POST` | `/api/books/` | Add a book | Staff JWT |
 | `GET` | `/api/books/<id>/` | Retrieve one book | Public |
-| `PUT`, `PATCH` | `/api/books/<id>/` | Replace or update a book, including its inventory | JWT |
-| `DELETE` | `/api/books/<id>/` | Delete a book | JWT |
+| `PUT`, `PATCH` | `/api/books/<id>/` | Replace or update a book, including its inventory | Staff JWT |
+| `DELETE` | `/api/books/<id>/` | Delete a book | Staff JWT |
 
 Use a JSON body for `POST` and `PUT`; `PATCH` accepts only the fields to change:
 
@@ -104,8 +104,9 @@ Use a JSON body for `POST` and `PUT`; `PATCH` accepts only the fields to change:
 means no copies are currently available. `daily_fee` is a nonnegative USD
 decimal with two fractional digits. Responses include the book's generated
 `id`. Invalid field values return `400 Bad Request`; an unknown book id returns
-`404 Not Found`. At this stage, authenticated users can write books. The next
-selected task will restrict writes to staff users.
+`404 Not Found`. Anyone can read the catalogue. Create, update, and delete
+requests require a JWT for a staff user; anonymous and non-staff users receive
+an authorization error for write requests.
 
 ## API documentation
 
