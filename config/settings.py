@@ -26,6 +26,7 @@ INSTALLED_APPS = [
     "drf_spectacular_sidecar",
     "users.apps.UsersConfig",
     "books.apps.BooksConfig",
+    "borrowings.apps.BorrowingsConfig",
 ]
 
 MIDDLEWARE = [
