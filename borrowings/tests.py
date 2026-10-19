@@ -172,6 +172,58 @@ class BorrowingReadAPITests(APITestCase):
         self.book.refresh_from_db()
         self.assertEqual(self.book.inventory, 2)
 
+    def test_authenticated_user_can_return_borrowing_and_restore_inventory(self):
+        self.authenticate_as(self.reader)
+        inventory_before = self.book.inventory
+
+        response = self.client.post(
+            f"{self.list_url}{self.borrowing.id}/return/",
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data["actual_return_date"],
+            timezone.localdate().isoformat(),
+        )
+        self.assertEqual(response.data["book"]["id"], self.book.id)
+        self.book.refresh_from_db()
+        self.assertEqual(self.book.inventory, inventory_before + 1)
+
+    def test_borrowing_cannot_be_returned_twice(self):
+        self.authenticate_as(self.reader)
+        inventory_before = self.book.inventory
+        return_url = f"{self.list_url}{self.borrowing.id}/return/"
+
+        first_response = self.client.post(return_url, format="json")
+        second_response = self.client.post(return_url, format="json")
+
+        self.assertEqual(first_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(second_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("actual_return_date", second_response.data)
+        self.book.refresh_from_db()
+        self.assertEqual(self.book.inventory, inventory_before + 1)
+
+    def test_user_cannot_return_another_users_borrowing(self):
+        self.authenticate_as(self.reader)
+
+        response = self.client.post(
+            f"{self.list_url}{self.other_borrowing.id}/return/",
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.other_borrowing.refresh_from_db()
+        self.assertIsNone(self.other_borrowing.actual_return_date)
+
+    def test_anonymous_user_cannot_return_borrowing(self):
+        response = self.client.post(
+            f"{self.list_url}{self.borrowing.id}/return/",
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
 
 class BorrowingDateConstraintTests(APITestCase):
     def setUp(self):
