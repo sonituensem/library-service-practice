@@ -119,6 +119,21 @@ class UserAuthenticationAndProfileTests(APITestCase):
         self.assertEqual(self.user.first_name, "Sam")
         self.assertEqual(self.user.email, "reader@example.com")
 
+    def test_profile_put_updates_the_authenticated_user(self):
+        access, _ = self.get_access_token()
+        self.client.credentials(HTTP_AUTHORIZE=f"Bearer {access}")
+
+        response = self.client.put(
+            self.profile_url,
+            {"first_name": "Sam", "last_name": "Booklover"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.first_name, "Sam")
+        self.assertEqual(self.user.last_name, "Booklover")
+
     def test_rejects_invalid_credentials(self):
         response = self.client.post(
             self.token_url,

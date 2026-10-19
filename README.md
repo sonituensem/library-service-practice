@@ -16,7 +16,7 @@ The planned tasks cover user registration and JWT authentication, book inventory
 book permissions, and the core borrowing lifecycle. Tests, Swagger documentation,
 test coverage reporting, and a complete README are project-wide requirements.
 
-The API setup and endpoint documentation will be added alongside the implementation.
+The implemented API endpoints and project commands are documented below.
 
 ## Local setup
 
