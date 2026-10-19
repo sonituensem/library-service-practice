@@ -78,6 +78,41 @@ Passwords are validated with Django's configured password validators, stored
 as hashes, and never returned by the API. The `is_staff` flag is never editable
 through these endpoints.
 
+## Books API
+
+| Method | Endpoint | Purpose | Access |
+| --- | --- | --- | --- |
+| `GET` | `/api/books/` | List all books and their available inventory | Public |
+| `POST` | `/api/books/` | Add a book | JWT |
+| `GET` | `/api/books/<id>/` | Retrieve one book | Public |
+| `PUT`, `PATCH` | `/api/books/<id>/` | Replace or update a book, including its inventory | JWT |
+| `DELETE` | `/api/books/<id>/` | Delete a book | JWT |
+
+Use a JSON body for `POST` and `PUT`; `PATCH` accepts only the fields to change:
+
+```json
+{
+  "title": "The Hobbit",
+  "author": "J. R. R. Tolkien",
+  "cover": "HARD",
+  "inventory": 3,
+  "daily_fee": "1.25"
+}
+```
+
+`cover` accepts `HARD` or `SOFT`. `inventory` is a nonnegative integer: zero
+means no copies are currently available. `daily_fee` is a nonnegative USD
+decimal with two fractional digits. Responses include the book's generated
+`id`. Invalid field values return `400 Bad Request`; an unknown book id returns
+`404 Not Found`. At this stage, authenticated users can write books. The next
+selected task will restrict writes to staff users.
+
+## API documentation
+
+Interactive Swagger UI is available at `/api/docs/` and the OpenAPI schema at
+`/api/schema/`. In Swagger UI, enter `Bearer <access-token>` in the `Authorize`
+authentication field before trying protected operations.
+
 ## Tests and coverage
 
 ```shell

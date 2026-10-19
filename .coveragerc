@@ -1,8 +1,12 @@
 [run]
-source = users
+source =
+    users
+    books
 omit =
     users/migrations/*
     users/tests.py
+    books/migrations/*
+    books/tests.py
 
 [report]
 fail_under = 60
