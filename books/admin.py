@@ -10,5 +10,3 @@ class BookAdmin(admin.ModelAdmin):
     list_display = ("title", "author", "cover", "inventory", "daily_fee")
     search_fields = ("title", "author")
     list_filter = ("cover",)
-
-# Register your models here.
