@@ -16,6 +16,7 @@ from borrowings.serializers import (
     BorrowingCreateSerializer,
     BorrowingReadSerializer,
 )
+from payments.services import create_fine_payment_for_return
 
 
 class BorrowingViewSet(
@@ -65,10 +66,11 @@ class BorrowingViewSet(
         """Mark a borrowing returned once and restore one available copy."""
         with transaction.atomic():
             borrowing = self.get_object()
+            actual_return_date = timezone.localdate()
             returned = Borrowing.objects.filter(
                 pk=borrowing.pk,
                 actual_return_date__isnull=True,
-            ).update(actual_return_date=timezone.localdate())
+            ).update(actual_return_date=actual_return_date)
             if not returned:
                 raise ValidationError(
                     {
@@ -82,6 +84,10 @@ class BorrowingViewSet(
                 inventory=F("inventory") + 1
             )
             borrowing.refresh_from_db()
+            create_fine_payment_for_return(
+                borrowing,
+                actual_return_date,
+            )
 
         serializer = BorrowingReadSerializer(
             borrowing,

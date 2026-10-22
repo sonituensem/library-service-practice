@@ -1,8 +1,10 @@
 """Django settings for the Library Service project."""
 
 import os
+from decimal import Decimal
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 from celery.schedules import crontab
 
@@ -103,6 +105,9 @@ TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
+FINE_MULTIPLIER = Decimal(os.environ.get("FINE_MULTIPLIER", "2"))
+if FINE_MULTIPLIER <= 0:
+    raise ImproperlyConfigured("FINE_MULTIPLIER must be greater than zero.")
 
 CELERY_BROKER_URL = os.environ.get(
     "CELERY_BROKER_URL", "redis://localhost:6379/0"
