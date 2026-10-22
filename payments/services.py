@@ -1,6 +1,6 @@
 """Business logic for calculating and starting borrowing payments."""
 
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 import stripe
 from django.conf import settings
@@ -24,6 +24,36 @@ def calculate_borrowing_total(borrowing):
     days = (borrowing.expected_return_date - borrowing.borrow_date).days
     total = borrowing.book.daily_fee * days
     return total.quantize(Decimal("0.01"))
+
+
+def calculate_overdue_fine(borrowing, actual_return_date):
+    """Calculate a rounded fine from the days a book is overdue."""
+    overdue_days = (
+        actual_return_date - borrowing.expected_return_date
+    ).days
+    if overdue_days <= 0:
+        return Decimal("0.00")
+
+    amount = (
+        borrowing.book.daily_fee
+        * overdue_days
+        * settings.FINE_MULTIPLIER
+    )
+    return amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def create_fine_payment_for_return(borrowing, actual_return_date):
+    """Record a pending fine when a borrowing is returned late."""
+    amount = calculate_overdue_fine(borrowing, actual_return_date)
+    if not amount:
+        return None
+
+    return Payment.objects.create(
+        status=Payment.Status.PENDING,
+        type=Payment.Type.FINE,
+        borrowing=borrowing,
+        money_to_pay=amount,
+    )
 
 
 def _configure_stripe():

@@ -357,6 +357,8 @@ class BorrowingReadAPITests(APITestCase):
 
     def test_user_can_return_borrowing_and_restore_inventory(self):
         self.authenticate_as(self.reader)
+        self.borrowing.expected_return_date = timezone.localdate()
+        self.borrowing.save(update_fields=("expected_return_date",))
         inventory_before = self.book.inventory
 
         response = self.client.post(
@@ -370,11 +372,89 @@ class BorrowingReadAPITests(APITestCase):
             timezone.localdate().isoformat(),
         )
         self.assertEqual(response.data["book"]["id"], self.book.id)
+        self.assertEqual(response.data["payments"], [])
         self.book.refresh_from_db()
         self.assertEqual(self.book.inventory, inventory_before + 1)
 
+    @override_settings(FINE_MULTIPLIER=Decimal("2"))
+    @patch("borrowings.views.timezone.localdate")
+    def test_late_return_creates_pending_fine(self, mock_localdate):
+        return_date = date(2026, 10, 22)
+        mock_localdate.return_value = return_date
+        self.borrowing.borrow_date = return_date - timedelta(days=10)
+        self.borrowing.expected_return_date = return_date - timedelta(days=3)
+        self.borrowing.save(
+            update_fields=("borrow_date", "expected_return_date")
+        )
+        self.authenticate_as(self.reader)
+
+        response = self.client.post(
+            f"{self.list_url}{self.borrowing.id}/return/",
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        fine = Payment.objects.get(borrowing=self.borrowing)
+        self.assertEqual(fine.type, Payment.Type.FINE)
+        self.assertEqual(fine.status, Payment.Status.PENDING)
+        self.assertEqual(fine.money_to_pay, Decimal("7.50"))
+        self.assertEqual(response.data["payments"][0]["id"], fine.id)
+
+    @patch("borrowings.views.timezone.localdate")
+    def test_late_return_creates_only_one_fine(self, mock_localdate):
+        return_date = date(2026, 10, 22)
+        mock_localdate.return_value = return_date
+        self.borrowing.borrow_date = return_date - timedelta(days=10)
+        self.borrowing.expected_return_date = return_date - timedelta(days=1)
+        self.borrowing.save(
+            update_fields=("borrow_date", "expected_return_date")
+        )
+        self.authenticate_as(self.reader)
+        return_url = f"{self.list_url}{self.borrowing.id}/return/"
+
+        first_response = self.client.post(return_url, format="json")
+        second_response = self.client.post(return_url, format="json")
+
+        self.assertEqual(first_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            second_response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertEqual(
+            Payment.objects.filter(
+                borrowing=self.borrowing,
+                type=Payment.Type.FINE,
+            ).count(),
+            1,
+        )
+
+    @override_settings(FINE_MULTIPLIER=Decimal("0.5"))
+    @patch("borrowings.views.timezone.localdate")
+    def test_fine_rounds_half_cent_up(self, mock_localdate):
+        return_date = date(2026, 10, 22)
+        mock_localdate.return_value = return_date
+        self.book.daily_fee = Decimal("0.01")
+        self.book.save(update_fields=("daily_fee",))
+        self.borrowing.borrow_date = return_date - timedelta(days=2)
+        self.borrowing.expected_return_date = return_date - timedelta(days=1)
+        self.borrowing.save(
+            update_fields=("borrow_date", "expected_return_date")
+        )
+        self.authenticate_as(self.reader)
+
+        response = self.client.post(
+            f"{self.list_url}{self.borrowing.id}/return/",
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        fine = Payment.objects.get(borrowing=self.borrowing)
+        self.assertEqual(fine.money_to_pay, Decimal("0.01"))
+
     def test_borrowing_cannot_be_returned_twice(self):
         self.authenticate_as(self.reader)
+        self.borrowing.expected_return_date = timezone.localdate()
+        self.borrowing.save(update_fields=("expected_return_date",))
         inventory_before = self.book.inventory
         return_url = f"{self.list_url}{self.borrowing.id}/return/"
 
