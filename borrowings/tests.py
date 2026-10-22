@@ -2,10 +2,13 @@
 
 from datetime import date, timedelta
 from decimal import Decimal
+from types import SimpleNamespace
 from unittest.mock import patch
 
+import stripe
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
+from django.test import override_settings
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -13,6 +16,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from books.models import Book
 from borrowings.models import Borrowing
+from payments.models import Payment
 
 
 User = get_user_model()
@@ -101,7 +105,10 @@ class BorrowingReadAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 2)
 
-    def test_authenticated_user_can_create_borrowing_and_reserve_copy(self):
+    @patch("borrowings.serializers.create_payment_for_borrowing")
+    def test_authenticated_user_can_create_borrowing_and_reserve_copy(
+        self, mock_create_payment
+    ):
         self.authenticate_as(self.reader)
 
         response = self.client.post(
@@ -128,10 +135,12 @@ class BorrowingReadAPITests(APITestCase):
         self.assertIsNone(response.data["actual_return_date"])
         self.book.refresh_from_db()
         self.assertEqual(self.book.inventory, 1)
+        mock_create_payment.assert_called_once()
 
     @patch("borrowings.serializers.send_new_borrowing_notification.delay")
+    @patch("borrowings.serializers.create_payment_for_borrowing")
     def test_borrowing_creation_queues_notification_after_commit(
-        self, mock_delay
+        self, mock_create_payment, mock_delay
     ):
         self.authenticate_as(self.reader)
 
@@ -149,6 +158,147 @@ class BorrowingReadAPITests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         mock_delay.assert_called_once_with(response.data["id"])
+        mock_create_payment.assert_called_once()
+
+    @override_settings(STRIPE_SECRET_KEY="")
+    def test_checkout_configuration_error_rolls_back_borrowing(self):
+        self.authenticate_as(self.reader)
+
+        response = self.client.post(
+            self.list_url,
+            {
+                "book_id": self.book.id,
+                "expected_return_date": (
+                    timezone.localdate() + timedelta(days=7)
+                ).isoformat(),
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+        self.assertEqual(Borrowing.objects.count(), 2)
+        self.assertFalse(Payment.objects.exists())
+        self.book.refresh_from_db()
+        self.assertEqual(self.book.inventory, 2)
+
+    @override_settings(STRIPE_SECRET_KEY="sk_test_for_tests_only")
+    @patch("payments.services.stripe.checkout.Session.create")
+    def test_stripe_api_error_rolls_back_borrowing_without_leaking_key(
+        self, mock_create_session
+    ):
+        mock_create_session.side_effect = stripe.APIConnectionError(
+            "Stripe connection failed"
+        )
+        self.authenticate_as(self.reader)
+
+        response = self.client.post(
+            self.list_url,
+            {
+                "book_id": self.book.id,
+                "expected_return_date": (
+                    timezone.localdate() + timedelta(days=7)
+                ).isoformat(),
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+        self.assertNotIn("sk_test", str(response.data))
+        self.assertEqual(Borrowing.objects.count(), 2)
+        self.assertFalse(Payment.objects.exists())
+        self.book.refresh_from_db()
+        self.assertEqual(self.book.inventory, 2)
+
+    @override_settings(STRIPE_SECRET_KEY="sk_live_must_not_be_used")
+    @patch("payments.services.stripe.checkout.Session.create")
+    def test_live_stripe_key_is_rejected_without_creating_checkout(
+        self, mock_create_session
+    ):
+        self.authenticate_as(self.reader)
+
+        response = self.client.post(
+            self.list_url,
+            {
+                "book_id": self.book.id,
+                "expected_return_date": (
+                    timezone.localdate() + timedelta(days=7)
+                ).isoformat(),
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+        mock_create_session.assert_not_called()
+        self.assertEqual(Borrowing.objects.count(), 2)
+        self.assertFalse(Payment.objects.exists())
+
+    @override_settings(
+        STRIPE_SECRET_KEY="sk_test_for_tests_only",
+        STRIPE_SUCCESS_URL=(
+            "http://localhost:8000/api/payments/success/"
+            "?session_id={CHECKOUT_SESSION_ID}"
+        ),
+        STRIPE_CANCEL_URL="http://localhost:8000/api/payments/cancel/",
+    )
+    @patch("payments.services.stripe.checkout.Session.create")
+    def test_checkout_session_and_payment_are_returned_with_borrowing(
+        self, mock_create_session
+    ):
+        session_url = "https://checkout.stripe.com/c/pay/" + "a" * 300
+        mock_create_session.return_value = SimpleNamespace(
+            id="cs_test_checkout",
+            url=session_url,
+        )
+        self.authenticate_as(self.reader)
+
+        response = self.client.post(
+            self.list_url,
+            {
+                "book_id": self.book.id,
+                "expected_return_date": (
+                    timezone.localdate() + timedelta(days=7)
+                ).isoformat(),
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(len(response.data["payments"]), 1)
+        payment_data = response.data["payments"][0]
+        payment = Payment.objects.get(pk=payment_data["id"])
+        self.assertEqual(payment.status, Payment.Status.PENDING)
+        self.assertEqual(payment.type, Payment.Type.PAYMENT)
+        self.assertEqual(payment.money_to_pay, Decimal("8.75"))
+        self.assertEqual(payment.session_id, "cs_test_checkout")
+        self.assertEqual(payment.session_url, session_url)
+        self.assertEqual(payment_data["borrowing"], response.data["id"])
+        self.assertEqual(payment_data["money_to_pay"], "8.75")
+        self.assertEqual(mock_create_session.call_count, 1)
+        checkout_params = mock_create_session.call_args.kwargs
+        self.assertEqual(checkout_params["mode"], "payment")
+        self.assertEqual(checkout_params["line_items"][0]["quantity"], 1)
+        self.assertEqual(
+            checkout_params["line_items"][0]["price_data"]["currency"],
+            "usd",
+        )
+        self.assertEqual(
+            checkout_params["line_items"][0]["price_data"]["unit_amount"],
+            875,
+        )
+        self.assertEqual(
+            checkout_params["success_url"],
+            "http://localhost:8000/api/payments/success/"
+            "?session_id={CHECKOUT_SESSION_ID}",
+        )
 
     def test_anonymous_user_cannot_create_borrowing(self):
         response = self.client.post(

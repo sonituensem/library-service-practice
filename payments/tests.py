@@ -11,6 +11,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from books.models import Book
 from borrowings.models import Borrowing
 from payments.models import Payment
+from payments.services import calculate_borrowing_total
 
 
 User = get_user_model()
@@ -112,6 +113,13 @@ class PaymentAPITests(APITestCase):
                 "money_to_pay": "8.75",
             },
         )
+
+    def test_borrowing_total_is_zero_for_same_day_dates(self):
+        self.borrowing.expected_return_date = self.borrowing.borrow_date
+
+        total = calculate_borrowing_total(self.borrowing)
+
+        self.assertEqual(total, Decimal("0.00"))
 
     def test_customer_cannot_retrieve_another_users_payment(self):
         self.authenticate_as(self.reader)
