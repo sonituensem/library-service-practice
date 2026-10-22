@@ -12,9 +12,11 @@ This repository is the Flex practice project; no front-end is included.
 
 ## Selected implementation scope
 
-The planned tasks cover user registration and JWT authentication, book inventory,
-book permissions, and the core borrowing lifecycle. Tests, Swagger documentation,
-test coverage reporting, and a complete README are project-wide requirements.
+The original selected tasks cover user registration and JWT authentication, book
+inventory, book permissions, and the core borrowing lifecycle. Mentor-recommended
+payment and notification enhancements are being added as follow-up tasks. Tests,
+Swagger documentation, test coverage reporting, and a complete README are
+project-wide requirements.
 
 The implemented API endpoints and project commands are documented below.
 
@@ -184,6 +186,19 @@ users can return any borrowing.
 Customers see only their own borrowing records; staff users can see all records.
 Each response includes the borrower id, borrowing dates, and a nested `book`
 object with the book's current inventory information.
+
+## Payments API
+
+| Method | Endpoint | Purpose | Access |
+| --- | --- | --- | --- |
+| `GET` | `/api/payments/` | List visible payment records | JWT |
+| `GET` | `/api/payments/<id>/` | Retrieve one payment | JWT |
+
+Customers see payment records linked to their own borrowings. Staff users can
+list and retrieve all payment records. The response includes `status` (`PENDING`
+or `PAID`), `type` (`PAYMENT` or `FINE`), the borrowing id, Stripe session URL
+and id, and the amount in USD. Payment records are read-only through this API;
+follow-up borrowing and payment flows will populate and update them.
 
 ## API documentation
 
