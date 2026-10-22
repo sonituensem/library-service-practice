@@ -12,11 +12,10 @@ This repository is the Flex practice project; no front-end is included.
 
 ## Selected implementation scope
 
-The original selected tasks cover user registration and JWT authentication, book
-inventory, book permissions, and the core borrowing lifecycle. Mentor-recommended
-payment and notification enhancements are being added as follow-up tasks. Tests,
-Swagger documentation, test coverage reporting, and a complete README are
-project-wide requirements.
+The selected tasks cover user registration and JWT authentication, book
+inventory, book permissions, the borrowing lifecycle, Stripe payments, Telegram
+notifications, overdue fines, and Docker Compose. Tests, Swagger documentation,
+test coverage reporting, and a complete README are project-wide requirements.
 
 The implemented API endpoints and project commands are documented below.
 
@@ -185,8 +184,12 @@ Return an active borrowing with an empty `POST` request to
 `/api/borrowings/<id>/return/`. The server sets `actual_return_date` to the
 current local date and restores one copy to the book's `inventory`. A borrowing
 cannot be returned twice; a repeated request returns `400 Bad Request` without
-changing the inventory. Customers can return only their own borrowings; staff
-users can return any borrowing.
+changing the inventory. If the return date is later than the expected return
+date, the same transaction also creates a pending `FINE` payment. The amount is
+the overdue days multiplied by the book's daily fee and `FINE_MULTIPLIER`
+(default `2`), rounded to cents using half-up rounding. Set `FINE_MULTIPLIER` in
+`.env` to change the policy. Customers can return only their own borrowings;
+staff users can return any borrowing.
 
 Customers see only their own borrowing records; staff users can see all records.
 Each response includes the borrower id, borrowing dates, and a nested `book`
@@ -206,7 +209,9 @@ Customers see payment records linked to their own borrowings. Staff users can
 list and retrieve all payment records. The response includes `status` (`PENDING`
 or `PAID`), `type` (`PAYMENT` or `FINE`), the borrowing id, Stripe session URL
 and id, and the amount in USD. Payment records are read-only through this API;
-the borrowing endpoint creates pending payment records. The success endpoint
+the borrowing and return endpoints create pending payment records. A late
+return creates a `FINE` record that appears in the same payment list and
+borrowing response. The success endpoint
 retrieves the session from Stripe and marks a payment `PAID` only after Stripe
 confirms it. The cancel endpoint leaves it pending and explains that the same
 Checkout link remains available for 24 hours. Confirmed payments also queue an
