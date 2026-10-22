@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     "books.apps.BooksConfig",
     "borrowings.apps.BorrowingsConfig",
     "notifications.apps.NotificationsConfig",
+    "payments.apps.PaymentsConfig",
 ]
 
 MIDDLEWARE = [
