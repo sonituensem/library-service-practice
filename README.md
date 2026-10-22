@@ -174,7 +174,12 @@ The server sets `borrow_date` to the current local date and assigns the
 authenticated user. The client cannot set the borrower or actual return date.
 If the book has no available copies, the request returns `400 Bad Request` and
 does not create a borrowing. A successful request reserves one copy by
-decrementing the book's `inventory`.
+decrementing the book's `inventory`. It also creates a pending Stripe `PAYMENT`
+for `daily_fee` multiplied by the number of calendar days between the borrowing
+and expected return dates. The response includes the payment amount and Checkout
+session URL/id. If Stripe is not configured or cannot create a session, the API
+returns `503 Service Unavailable` and rolls back the borrowing and inventory
+reservation.
 
 Return an active borrowing with an empty `POST` request to
 `/api/borrowings/<id>/return/`. The server sets `actual_return_date` to the
@@ -185,7 +190,8 @@ users can return any borrowing.
 
 Customers see only their own borrowing records; staff users can see all records.
 Each response includes the borrower id, borrowing dates, and a nested `book`
-object with the book's current inventory information.
+object with the book's current inventory information, plus the associated
+payment records.
 
 ## Payments API
 
@@ -198,7 +204,21 @@ Customers see payment records linked to their own borrowings. Staff users can
 list and retrieve all payment records. The response includes `status` (`PENDING`
 or `PAID`), `type` (`PAYMENT` or `FINE`), the borrowing id, Stripe session URL
 and id, and the amount in USD. Payment records are read-only through this API;
-follow-up borrowing and payment flows will populate and update them.
+the borrowing endpoint creates pending payment records.
+
+## Stripe test setup
+
+Copy `.env.sample` to `.env` and set `STRIPE_SECRET_KEY` to a Stripe test-mode
+secret key (`sk_test_...`). New borrowings create one hosted Checkout line item
+in USD. The sample success and cancel URLs are temporary placeholders; the next
+payment task will connect them to the API endpoints. Tests mock Stripe and do
+not require a Stripe account or make external requests. Never add a live key or
+any Stripe secret to Git.
+
+For the manual learning step, create a Checkout Session with Stripe's Python
+SDK in test mode, then create a `Payment` in Django admin using that session's
+URL and id. Link it to a borrowing and check it with `GET /api/payments/` and
+`GET /api/payments/<id>/`. The payment API remains read-only for customers.
 
 ## API documentation
 
