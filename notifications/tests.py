@@ -20,6 +20,7 @@ from notifications.services import (
 from notifications.tasks import (
     check_overdue_borrowings,
     send_new_borrowing_notification,
+    send_no_overdue_borrowings_notification,
     send_overdue_borrowing_notification,
 )
 
@@ -236,6 +237,12 @@ class DailyOverdueNotificationTests(TestCase):
         self.assertEqual(count, 0)
         mock_no_overdue.assert_called_once_with()
         mock_overdue.assert_not_called()
+
+    @patch("notifications.tasks.send_telegram_message")
+    def test_no_overdue_task_sends_exact_required_message(self, mock_send):
+        send_no_overdue_borrowings_notification.run()
+
+        mock_send.assert_called_once_with("No borrowings overdue today!")
 
     @patch("notifications.tasks.send_telegram_message")
     def test_individual_task_sends_details_and_days_overdue(self, mock_send):
