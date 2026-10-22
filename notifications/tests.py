@@ -22,7 +22,9 @@ from notifications.tasks import (
     send_new_borrowing_notification,
     send_no_overdue_borrowings_notification,
     send_overdue_borrowing_notification,
+    send_successful_payment_notification,
 )
+from payments.models import Payment
 
 
 User = get_user_model()
@@ -271,5 +273,55 @@ class DailyOverdueNotificationTests(TestCase):
             "notifications.tasks.timezone.localdate", return_value=self.today
         ):
             send_overdue_borrowing_notification.run(borrowing.id)
+
+        mock_send.assert_not_called()
+
+
+class SuccessfulPaymentNotificationTests(TestCase):
+    def setUp(self):
+        reader = User.objects.create_user(
+            "reader@example.com",
+            "StrongPass9#",
+            first_name="Alex",
+            last_name="Reader",
+        )
+        book = Book.objects.create(
+            title="The Hobbit",
+            author="J. R. R. Tolkien",
+            cover="HARD",
+            inventory=0,
+            daily_fee=Decimal("1.25"),
+        )
+        borrowing = Borrowing.objects.create(
+            user=reader,
+            book=book,
+            borrow_date=date(2026, 10, 20),
+            expected_return_date=date(2026, 10, 27),
+        )
+        self.payment = Payment.objects.create(
+            status=Payment.Status.PAID,
+            type=Payment.Type.PAYMENT,
+            borrowing=borrowing,
+            money_to_pay=Decimal("8.75"),
+        )
+
+    @patch("notifications.tasks.send_telegram_message")
+    def test_task_sends_confirmed_payment_details(self, mock_send):
+        send_successful_payment_notification.run(self.payment.id)
+
+        message = mock_send.call_args.args[0]
+        self.assertIn(f"Successful payment #{self.payment.id}", message)
+        self.assertIn(f"Borrowing: #{self.payment.borrowing_id}", message)
+        self.assertIn("Customer: Alex Reader", message)
+        self.assertIn("Book: The Hobbit", message)
+        self.assertIn("Amount: $8.75 USD", message)
+
+    @patch("notifications.tasks.send_telegram_message")
+    def test_task_skips_pending_or_missing_payment(self, mock_send):
+        self.payment.status = Payment.Status.PENDING
+        self.payment.save(update_fields=("status",))
+
+        send_successful_payment_notification.run(self.payment.id)
+        send_successful_payment_notification.run(self.payment.id + 1000)
 
         mock_send.assert_not_called()

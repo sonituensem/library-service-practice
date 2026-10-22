@@ -241,14 +241,7 @@ class BorrowingReadAPITests(APITestCase):
         self.assertEqual(Borrowing.objects.count(), 2)
         self.assertFalse(Payment.objects.exists())
 
-    @override_settings(
-        STRIPE_SECRET_KEY="sk_test_for_tests_only",
-        STRIPE_SUCCESS_URL=(
-            "http://localhost:8000/api/payments/success/"
-            "?session_id={CHECKOUT_SESSION_ID}"
-        ),
-        STRIPE_CANCEL_URL="http://localhost:8000/api/payments/cancel/",
-    )
+    @override_settings(STRIPE_SECRET_KEY="sk_test_for_tests_only")
     @patch("payments.services.stripe.checkout.Session.create")
     def test_checkout_session_and_payment_are_returned_with_borrowing(
         self, mock_create_session
@@ -296,8 +289,12 @@ class BorrowingReadAPITests(APITestCase):
         )
         self.assertEqual(
             checkout_params["success_url"],
-            "http://localhost:8000/api/payments/success/"
+            "http://testserver/api/payments/success/"
             "?session_id={CHECKOUT_SESSION_ID}",
+        )
+        self.assertEqual(
+            checkout_params["cancel_url"],
+            "http://testserver/api/payments/cancel/",
         )
 
     def test_anonymous_user_cannot_create_borrowing(self):

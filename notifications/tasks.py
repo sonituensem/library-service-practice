@@ -6,6 +6,7 @@ from django.utils import timezone
 
 from borrowings.models import Borrowing
 from notifications.services import TelegramDeliveryError, send_telegram_message
+from payments.models import Payment
 
 
 def format_new_borrowing_message(borrowing):
@@ -40,6 +41,19 @@ def format_overdue_borrowing_message(borrowing, today=None):
         f"Borrowed: {borrowing.borrow_date.isoformat()}\n"
         f"Expected return: {borrowing.expected_return_date.isoformat()}\n"
         f"Days overdue: {days_overdue}"
+    )
+
+
+def format_successful_payment_message(payment):
+    """Build an administrator message for a confirmed borrowing payment."""
+    borrowing = payment.borrowing
+    customer = format_customer_name(borrowing)
+    return (
+        f"Successful payment #{payment.id}\n"
+        f"Borrowing: #{borrowing.id}\n"
+        f"Customer: {customer}\n"
+        f"Book: {borrowing.book.title} (ID: {borrowing.book_id})\n"
+        f"Amount: ${payment.money_to_pay:.2f} USD"
     )
 
 
@@ -97,6 +111,30 @@ def send_overdue_borrowing_notification(self, borrowing_id):
 def send_no_overdue_borrowings_notification():
     """Notify administrators when the daily check finds no overdue loans."""
     send_telegram_message("No borrowings overdue today!")
+
+
+@shared_task(
+    bind=True,
+    autoretry_for=(TelegramDeliveryError,),
+    retry_backoff=True,
+    retry_jitter=True,
+    retry_kwargs={"max_retries": 3},
+    ignore_result=True,
+)
+def send_successful_payment_notification(self, payment_id):
+    """Notify administrators about a payment only after it is confirmed."""
+    payment = (
+        Payment.objects.filter(
+            pk=payment_id,
+            status=Payment.Status.PAID,
+        )
+        .select_related("borrowing__user", "borrowing__book")
+        .first()
+    )
+    if payment is None:
+        return
+
+    send_telegram_message(format_successful_payment_message(payment))
 
 
 @shared_task(ignore_result=True)

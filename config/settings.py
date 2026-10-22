@@ -103,14 +103,6 @@ TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
-STRIPE_SUCCESS_URL = os.environ.get(
-    "STRIPE_SUCCESS_URL",
-    "https://example.com/success",
-)
-STRIPE_CANCEL_URL = os.environ.get(
-    "STRIPE_CANCEL_URL",
-    "https://example.com/cancel",
-)
 
 CELERY_BROKER_URL = os.environ.get(
     "CELERY_BROKER_URL", "redis://localhost:6379/0"
