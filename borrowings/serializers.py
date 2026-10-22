@@ -8,6 +8,7 @@ from rest_framework import serializers
 from books.models import Book
 from books.serializers import BookSerializer
 from borrowings.models import Borrowing
+from notifications.tasks import send_new_borrowing_notification
 
 
 class BorrowingReadSerializer(serializers.ModelSerializer):
@@ -77,9 +78,14 @@ class BorrowingCreateSerializer(serializers.ModelSerializer):
                 )
 
             book.refresh_from_db(fields=("inventory",))
-            return Borrowing.objects.create(
+            borrowing = Borrowing.objects.create(
                 book=book,
                 user=self.context["request"].user,
                 borrow_date=timezone.localdate(),
                 **validated_data,
             )
+            transaction.on_commit(
+                lambda: send_new_borrowing_notification.delay(borrowing.pk),
+                robust=True,
+            )
+            return borrowing

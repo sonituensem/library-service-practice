@@ -4,6 +4,7 @@ from django.test import TestCase
 
 from datetime import date, timedelta
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
@@ -119,6 +120,25 @@ class BorrowingReadAPITests(APITestCase):
         self.assertIsNone(response.data["actual_return_date"])
         self.book.refresh_from_db()
         self.assertEqual(self.book.inventory, 1)
+
+    @patch("borrowings.serializers.send_new_borrowing_notification.delay")
+    def test_borrowing_creation_queues_notification_after_commit(self, mock_delay):
+        self.authenticate_as(self.reader)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                self.list_url,
+                {
+                    "book_id": self.book.id,
+                    "expected_return_date": (
+                        timezone.localdate() + timedelta(days=7)
+                    ).isoformat(),
+                },
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        mock_delay.assert_called_once_with(response.data["id"])
 
     def test_anonymous_user_cannot_create_borrowing(self):
         response = self.client.post(
