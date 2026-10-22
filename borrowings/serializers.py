@@ -95,7 +95,10 @@ class BorrowingCreateSerializer(serializers.ModelSerializer):
                 borrow_date=timezone.localdate(),
                 **validated_data,
             )
-            create_payment_for_borrowing(borrowing)
+            create_payment_for_borrowing(
+                borrowing,
+                request=self.context["request"],
+            )
             transaction.on_commit(
                 lambda: send_new_borrowing_notification.delay(borrowing.pk),
                 robust=True,
