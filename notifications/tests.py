@@ -23,7 +23,10 @@ User = get_user_model()
 
 
 class TelegramDeliveryTests(TestCase):
-    @override_settings(TELEGRAM_BOT_TOKEN="test-token", TELEGRAM_CHAT_ID="-100123")
+    @override_settings(
+        TELEGRAM_BOT_TOKEN="test-token",
+        TELEGRAM_CHAT_ID="-100123",
+    )
     @patch("notifications.services.urlopen")
     def test_sends_form_encoded_message_and_returns_telegram_message_id(
         self, mock_urlopen
@@ -49,7 +52,10 @@ class TelegramDeliveryTests(TestCase):
         with self.assertRaises(TelegramConfigurationError):
             send_telegram_message("A new book was borrowed")
 
-    @override_settings(TELEGRAM_BOT_TOKEN="test-token", TELEGRAM_CHAT_ID="-100123")
+    @override_settings(
+        TELEGRAM_BOT_TOKEN="test-token",
+        TELEGRAM_CHAT_ID="-100123",
+    )
     @patch("notifications.services.urlopen")
     def test_telegram_api_rejection_is_reported(self, mock_urlopen):
         response = MagicMock()
@@ -61,7 +67,10 @@ class TelegramDeliveryTests(TestCase):
         with self.assertRaises(TelegramDeliveryError):
             send_telegram_message("A new book was borrowed")
 
-    @override_settings(TELEGRAM_BOT_TOKEN="secret-token", TELEGRAM_CHAT_ID="-100123")
+    @override_settings(
+        TELEGRAM_BOT_TOKEN="secret-token",
+        TELEGRAM_CHAT_ID="-100123",
+    )
     @patch("notifications.services.urlopen")
     def test_http_error_does_not_expose_the_bot_token(self, mock_urlopen):
         mock_urlopen.side_effect = HTTPError(
@@ -77,9 +86,14 @@ class TelegramDeliveryTests(TestCase):
 
         self.assertNotIn("secret-token", str(error.exception))
 
-    @override_settings(TELEGRAM_BOT_TOKEN="secret-token", TELEGRAM_CHAT_ID="-100123")
+    @override_settings(
+        TELEGRAM_BOT_TOKEN="secret-token",
+        TELEGRAM_CHAT_ID="-100123",
+    )
     @patch("notifications.services.urlopen")
-    def test_network_error_is_reported_without_request_details(self, mock_urlopen):
+    def test_network_error_is_reported_without_request_details(
+        self, mock_urlopen
+    ):
         mock_urlopen.side_effect = URLError(
             "https://api.telegram.org/botsecret-token/sendMessage"
         )
@@ -124,8 +138,20 @@ class NewBorrowingNotificationTaskTests(TestCase):
         self.assertIn("Expected return: 2026-10-27", message)
 
     @patch("notifications.tasks.send_telegram_message")
+    def test_task_uses_email_when_customer_name_is_empty(self, mock_send):
+        self.reader.first_name = ""
+        self.reader.last_name = ""
+        self.reader.save(update_fields=("first_name", "last_name"))
+
+        send_new_borrowing_notification.run(self.borrowing.id)
+
+        self.assertIn(
+            "Customer: reader@example.com",
+            mock_send.call_args.args[0],
+        )
+
+    @patch("notifications.tasks.send_telegram_message")
     def test_missing_borrowing_is_ignored(self, mock_send):
         send_new_borrowing_notification.run(self.borrowing.id + 1000)
 
         mock_send.assert_not_called()
-

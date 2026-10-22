@@ -4,11 +4,7 @@ from celery import shared_task
 from django.core.exceptions import ObjectDoesNotExist
 
 from borrowings.models import Borrowing
-from notifications.services import (
-    TelegramConfigurationError,
-    TelegramDeliveryError,
-    send_telegram_message,
-)
+from notifications.services import TelegramDeliveryError, send_telegram_message
 
 
 def format_new_borrowing_message(borrowing):
@@ -44,10 +40,5 @@ def send_new_borrowing_notification(self, borrowing_id):
     except ObjectDoesNotExist:
         return
 
-    try:
-        message = format_new_borrowing_message(borrowing)
-        send_telegram_message(message)
-    except TelegramConfigurationError:
-        # Missing credentials are a deployment configuration issue, not transient.
-        raise
-
+    message = format_new_borrowing_message(borrowing)
+    send_telegram_message(message)

@@ -22,7 +22,8 @@ def send_telegram_message(text):
     chat_id = settings.TELEGRAM_CHAT_ID
     if not bot_token or not chat_id:
         raise TelegramConfigurationError(
-            "Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID to enable notifications."
+            "Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID "
+            "to enable notifications."
         )
 
     request = Request(
@@ -39,8 +40,14 @@ def send_telegram_message(text):
         raise TelegramDeliveryError(
             f"Telegram returned HTTP {error.code}."
         ) from None
-    except (URLError, TimeoutError, OSError, UnicodeDecodeError, json.JSONDecodeError):
-        # The exception may contain the request URL, which includes the bot token.
+    except (
+        URLError,
+        TimeoutError,
+        OSError,
+        UnicodeDecodeError,
+        json.JSONDecodeError,
+    ):
+        # Avoid exception details because the request URL contains the token.
         raise TelegramDeliveryError("Telegram request failed.") from None
 
     if not isinstance(result, dict) or not result.get("ok"):

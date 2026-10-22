@@ -60,7 +60,12 @@ class BorrowingCreateSerializer(serializers.ModelSerializer):
         expected_return_date = attrs.get("expected_return_date")
         if expected_return_date and expected_return_date < borrow_date:
             raise serializers.ValidationError(
-                {"expected_return_date": "The expected return date cannot precede the borrow date."}
+                {
+                    "expected_return_date": (
+                        "The expected return date cannot precede "
+                        "the borrow date."
+                    )
+                }
             )
         return attrs
 
