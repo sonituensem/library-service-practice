@@ -3,10 +3,11 @@
 import json
 from datetime import date
 from decimal import Decimal
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 from urllib.error import HTTPError, URLError
 
 from django.contrib.auth import get_user_model
+from django.conf import settings
 from django.test import TestCase, override_settings
 
 from books.models import Book
@@ -16,7 +17,11 @@ from notifications.services import (
     TelegramDeliveryError,
     send_telegram_message,
 )
-from notifications.tasks import send_new_borrowing_notification
+from notifications.tasks import (
+    check_overdue_borrowings,
+    send_new_borrowing_notification,
+    send_overdue_borrowing_notification,
+)
 
 
 User = get_user_model()
@@ -153,5 +158,111 @@ class NewBorrowingNotificationTaskTests(TestCase):
     @patch("notifications.tasks.send_telegram_message")
     def test_missing_borrowing_is_ignored(self, mock_send):
         send_new_borrowing_notification.run(self.borrowing.id + 1000)
+
+        mock_send.assert_not_called()
+
+
+class DailyOverdueNotificationTests(TestCase):
+    today = date(2026, 10, 22)
+
+    def setUp(self):
+        self.reader = User.objects.create_user(
+            "reader@example.com", "StrongPass9#"
+        )
+        self.book = Book.objects.create(
+            title="The Hobbit",
+            author="J. R. R. Tolkien",
+            cover="HARD",
+            inventory=0,
+            daily_fee=Decimal("1.25"),
+        )
+
+    def create_borrowing(self, expected_return_date, actual_return_date=None):
+        return Borrowing.objects.create(
+            user=self.reader,
+            book=self.book,
+            borrow_date=date(2026, 10, 15),
+            expected_return_date=expected_return_date,
+            actual_return_date=actual_return_date,
+        )
+
+    def test_daily_schedule_runs_at_nine_utc(self):
+        entry = settings.CELERY_BEAT_SCHEDULE[
+            "check-overdue-borrowings-daily"
+        ]
+
+        self.assertEqual(
+            entry["task"], "notifications.tasks.check_overdue_borrowings"
+        )
+        self.assertEqual(entry["schedule"].hour, {9})
+        self.assertEqual(entry["schedule"].minute, {0})
+
+    def test_check_queues_one_task_per_active_overdue_borrowing(self):
+        overdue_today = self.create_borrowing(self.today)
+        overdue_earlier = self.create_borrowing(date(2026, 10, 20))
+        self.create_borrowing(
+            date(2026, 10, 20), actual_return_date=self.today
+        )
+        self.create_borrowing(date(2026, 10, 23))
+
+        with patch(
+            "notifications.tasks.timezone.localdate", return_value=self.today
+        ), patch(
+            "notifications.tasks.send_overdue_borrowing_notification.delay"
+        ) as mock_overdue, patch(
+            "notifications.tasks.send_no_overdue_borrowings_notification.delay"
+        ) as mock_no_overdue:
+            count = check_overdue_borrowings.run()
+
+        self.assertEqual(count, 2)
+        self.assertEqual(
+            mock_overdue.call_args_list,
+            [call(overdue_today.id), call(overdue_earlier.id)],
+        )
+        mock_no_overdue.assert_not_called()
+
+    def test_check_sends_required_message_when_there_are_no_overdues(self):
+        self.create_borrowing(date(2026, 10, 23))
+
+        with patch(
+            "notifications.tasks.timezone.localdate", return_value=self.today
+        ), patch(
+            "notifications.tasks.send_no_overdue_borrowings_notification.delay"
+        ) as mock_no_overdue, patch(
+            "notifications.tasks.send_overdue_borrowing_notification.delay"
+        ) as mock_overdue:
+            count = check_overdue_borrowings.run()
+
+        self.assertEqual(count, 0)
+        mock_no_overdue.assert_called_once_with()
+        mock_overdue.assert_not_called()
+
+    @patch("notifications.tasks.send_telegram_message")
+    def test_individual_task_sends_details_and_days_overdue(self, mock_send):
+        borrowing = self.create_borrowing(date(2026, 10, 20))
+
+        with patch(
+            "notifications.tasks.timezone.localdate", return_value=self.today
+        ):
+            send_overdue_borrowing_notification.run(borrowing.id)
+
+        message = mock_send.call_args.args[0]
+        self.assertIn(f"Overdue borrowing #{borrowing.id}", message)
+        self.assertIn("Customer: reader@example.com", message)
+        self.assertIn("Book: The Hobbit", message)
+        self.assertIn("Days overdue: 2", message)
+
+    @patch("notifications.tasks.send_telegram_message")
+    def test_individual_task_skips_borrowing_returned_after_daily_check(
+        self, mock_send
+    ):
+        borrowing = self.create_borrowing(
+            date(2026, 10, 20), actual_return_date=self.today
+        )
+
+        with patch(
+            "notifications.tasks.timezone.localdate", return_value=self.today
+        ):
+            send_overdue_borrowing_notification.run(borrowing.id)
 
         mock_send.assert_not_called()
