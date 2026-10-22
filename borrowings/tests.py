@@ -1,9 +1,8 @@
-from django.test import TestCase
-
 """API and model tests for the Borrowings Service."""
 
 from datetime import date, timedelta
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
@@ -66,7 +65,10 @@ class BorrowingReadAPITests(APITestCase):
         response = self.client.get(self.list_url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual([item["id"] for item in response.data], [self.borrowing.id])
+        self.assertEqual(
+            [item["id"] for item in response.data],
+            [self.borrowing.id],
+        )
 
     def test_detail_returns_nested_book_and_borrower_id(self):
         self.authenticate_as(self.reader)
@@ -85,7 +87,9 @@ class BorrowingReadAPITests(APITestCase):
     def test_user_cannot_retrieve_another_users_borrowing(self):
         self.authenticate_as(self.reader)
 
-        response = self.client.get(f"{self.list_url}{self.other_borrowing.id}/")
+        response = self.client.get(
+            f"{self.list_url}{self.other_borrowing.id}/"
+        )
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
@@ -104,7 +108,9 @@ class BorrowingReadAPITests(APITestCase):
             self.list_url,
             {
                 "book_id": self.book.id,
-                "expected_return_date": (timezone.localdate() + timedelta(days=7)).isoformat(),
+                "expected_return_date": (
+                    timezone.localdate() + timedelta(days=7)
+                ).isoformat(),
                 "user": self.other_reader.id,
                 "borrow_date": "2026-01-01",
                 "actual_return_date": "2026-02-01",
@@ -114,18 +120,44 @@ class BorrowingReadAPITests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data["user"], self.reader.id)
-        self.assertEqual(response.data["borrow_date"], timezone.localdate().isoformat())
+        self.assertEqual(
+            response.data["borrow_date"],
+            timezone.localdate().isoformat(),
+        )
         self.assertEqual(response.data["book"]["id"], self.book.id)
         self.assertIsNone(response.data["actual_return_date"])
         self.book.refresh_from_db()
         self.assertEqual(self.book.inventory, 1)
+
+    @patch("borrowings.serializers.send_new_borrowing_notification.delay")
+    def test_borrowing_creation_queues_notification_after_commit(
+        self, mock_delay
+    ):
+        self.authenticate_as(self.reader)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                self.list_url,
+                {
+                    "book_id": self.book.id,
+                    "expected_return_date": (
+                        timezone.localdate() + timedelta(days=7)
+                    ).isoformat(),
+                },
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        mock_delay.assert_called_once_with(response.data["id"])
 
     def test_anonymous_user_cannot_create_borrowing(self):
         response = self.client.post(
             self.list_url,
             {
                 "book_id": self.book.id,
-                "expected_return_date": (timezone.localdate() + timedelta(days=7)).isoformat(),
+                "expected_return_date": (
+                    timezone.localdate() + timedelta(days=7)
+                ).isoformat(),
             },
             format="json",
         )
@@ -143,7 +175,9 @@ class BorrowingReadAPITests(APITestCase):
             self.list_url,
             {
                 "book_id": self.book.id,
-                "expected_return_date": (timezone.localdate() + timedelta(days=7)).isoformat(),
+                "expected_return_date": (
+                    timezone.localdate() + timedelta(days=7)
+                ).isoformat(),
             },
             format="json",
         )
@@ -161,7 +195,9 @@ class BorrowingReadAPITests(APITestCase):
             self.list_url,
             {
                 "book_id": self.book.id,
-                "expected_return_date": (timezone.localdate() - timedelta(days=1)).isoformat(),
+                "expected_return_date": (
+                    timezone.localdate() - timedelta(days=1)
+                ).isoformat(),
             },
             format="json",
         )
@@ -172,7 +208,7 @@ class BorrowingReadAPITests(APITestCase):
         self.book.refresh_from_db()
         self.assertEqual(self.book.inventory, 2)
 
-    def test_authenticated_user_can_return_borrowing_and_restore_inventory(self):
+    def test_user_can_return_borrowing_and_restore_inventory(self):
         self.authenticate_as(self.reader)
         inventory_before = self.book.inventory
 
@@ -199,7 +235,10 @@ class BorrowingReadAPITests(APITestCase):
         second_response = self.client.post(return_url, format="json")
 
         self.assertEqual(first_response.status_code, status.HTTP_200_OK)
-        self.assertEqual(second_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            second_response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
         self.assertIn("actual_return_date", second_response.data)
         self.book.refresh_from_db()
         self.assertEqual(self.book.inventory, inventory_before + 1)
@@ -227,7 +266,9 @@ class BorrowingReadAPITests(APITestCase):
 
 class BorrowingDateConstraintTests(APITestCase):
     def setUp(self):
-        self.reader = User.objects.create_user("reader@example.com", "StrongPass9#")
+        self.reader = User.objects.create_user(
+            "reader@example.com", "StrongPass9#"
+        )
         self.book = Book.objects.create(
             title="The Hobbit",
             author="J. R. R. Tolkien",

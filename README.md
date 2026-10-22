@@ -18,6 +18,29 @@ test coverage reporting, and a complete README are project-wide requirements.
 
 The implemented API endpoints and project commands are documented below.
 
+## Telegram notifications
+
+The borrowing API queues a Telegram notification after a new borrowing has
+been committed to the database. The message includes the borrowing id,
+customer, book, borrowing date, and expected return date. Telegram delivery
+runs in a Celery worker, so the API request does not wait for Telegram.
+
+1. Create a bot with Telegram's BotFather and add it to the administrators'
+   chat. Copy `.env.sample` to `.env` (in PowerShell, run
+   `Copy-Item .env.sample .env`) and set `TELEGRAM_BOT_TOKEN` and
+   `TELEGRAM_CHAT_ID`. Keep `.env` private; it is ignored by Git.
+2. Start Redis at the address configured by `CELERY_BROKER_URL`.
+3. Start the Django API with `python manage.py runserver`.
+4. In another terminal, start a worker:
+
+   ```shell
+   celery -A config worker --loglevel=INFO --pool=solo
+   ```
+
+The `--pool=solo` option is for local development on Windows. The notification
+tests mock Telegram requests and do not require a bot token or live Telegram
+chat. Scheduled overdue notifications are tracked as a separate project task.
+
 ## Local setup
 
 ```shell
