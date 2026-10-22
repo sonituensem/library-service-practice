@@ -24,9 +24,15 @@ class BorrowingViewSet(
     mixins.RetrieveModelMixin,
     viewsets.GenericViewSet,
 ):
-    """Create borrowing records and read records visible to the current user."""
+    """Create borrowings and read records visible to the current user."""
 
-    queryset = Borrowing.objects.select_related("book", "user")
+    queryset = (
+        Borrowing.objects.select_related(
+            "book",
+            "user",
+        )
+        .prefetch_related("payments")
+    )
     serializer_class = BorrowingReadSerializer
     authentication_classes = (JWTAuthentication,)
     permission_classes = (permissions.IsAuthenticated,)

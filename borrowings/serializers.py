@@ -9,6 +9,8 @@ from books.models import Book
 from books.serializers import BookSerializer
 from borrowings.models import Borrowing
 from notifications.tasks import send_new_borrowing_notification
+from payments.serializers import PaymentSerializer
+from payments.services import create_payment_for_borrowing
 
 
 class BorrowingReadSerializer(serializers.ModelSerializer):
@@ -16,6 +18,7 @@ class BorrowingReadSerializer(serializers.ModelSerializer):
 
     book = BookSerializer(read_only=True)
     user = serializers.PrimaryKeyRelatedField(read_only=True)
+    payments = PaymentSerializer(many=True, read_only=True)
 
     class Meta:
         model = Borrowing
@@ -26,6 +29,7 @@ class BorrowingReadSerializer(serializers.ModelSerializer):
             "actual_return_date",
             "book",
             "user",
+            "payments",
         )
         read_only_fields = fields
 
@@ -41,6 +45,7 @@ class BorrowingCreateSerializer(serializers.ModelSerializer):
     book = BookSerializer(read_only=True)
     borrow_date = serializers.DateField(read_only=True)
     user = serializers.PrimaryKeyRelatedField(read_only=True)
+    payments = PaymentSerializer(many=True, read_only=True)
 
     class Meta:
         model = Borrowing
@@ -52,6 +57,7 @@ class BorrowingCreateSerializer(serializers.ModelSerializer):
             "book",
             "book_id",
             "user",
+            "payments",
         )
         read_only_fields = ("id", "actual_return_date", "book", "user")
 
@@ -89,6 +95,7 @@ class BorrowingCreateSerializer(serializers.ModelSerializer):
                 borrow_date=timezone.localdate(),
                 **validated_data,
             )
+            create_payment_for_borrowing(borrowing)
             transaction.on_commit(
                 lambda: send_new_borrowing_notification.delay(borrowing.pk),
                 robust=True,

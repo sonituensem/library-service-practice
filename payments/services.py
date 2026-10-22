@@ -27,7 +27,7 @@ def calculate_borrowing_total(borrowing):
 
 def _create_checkout_session(payment):
     secret_key = settings.STRIPE_SECRET_KEY
-    if not secret_key:
+    if not secret_key.startswith("sk_test_"):
         raise StripeCheckoutError()
 
     stripe.api_key = secret_key
