@@ -77,6 +77,50 @@ python manage.py createsuperuser
 Registering through the public users API creates a regular customer account;
 it cannot grant staff access.
 
+## Docker Compose setup
+
+The Compose stack runs the API, PostgreSQL, Redis, a Celery worker, and Celery
+Beat. It waits for PostgreSQL and Redis health checks, runs migrations once,
+then starts the API and background processes.
+
+Copy the sample environment file, then change the local Django secret and
+PostgreSQL password:
+
+```powershell
+Copy-Item .env.sample .env
+```
+
+Start all services in the background:
+
+```shell
+docker compose up --build -d
+docker compose ps --all
+```
+
+The API and Swagger UI are available at `http://localhost:8000/api/` and
+`http://localhost:8000/api/docs/`. Check the database migrations and API from
+inside the running service:
+
+```shell
+docker compose exec api python manage.py check
+docker compose exec api python manage.py migrate --check
+docker compose exec api python manage.py createsuperuser
+```
+
+Check that the background worker answers Celery's control ping and inspect
+worker/scheduler logs:
+
+```shell
+docker compose exec worker celery -A config inspect ping
+docker compose logs worker beat
+```
+
+The PostgreSQL data is stored in the `postgres_data` volume. `docker compose
+down` stops the services but preserves the database; `docker compose down -v`
+also deletes that data. Compose sets `DB_ENGINE`, `DB_NAME`, `DB_USER`,
+`DB_PASSWORD`, `DB_HOST`, and `DB_PORT` for the application containers. Outside
+Compose, the project continues to use its local SQLite database by default.
+
 ## Users API
 
 | Method | Endpoint | Purpose | Access |
