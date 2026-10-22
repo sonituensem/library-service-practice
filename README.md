@@ -199,21 +199,26 @@ payment records.
 | --- | --- | --- | --- |
 | `GET` | `/api/payments/` | List visible payment records | JWT |
 | `GET` | `/api/payments/<id>/` | Retrieve one payment | JWT |
+| `GET` | `/api/payments/success/?session_id=...` | Verify Checkout and confirm payment | Stripe redirect |
+| `GET` | `/api/payments/cancel/` | Explain how to resume a canceled Checkout | Stripe redirect |
 
 Customers see payment records linked to their own borrowings. Staff users can
 list and retrieve all payment records. The response includes `status` (`PENDING`
 or `PAID`), `type` (`PAYMENT` or `FINE`), the borrowing id, Stripe session URL
 and id, and the amount in USD. Payment records are read-only through this API;
-the borrowing endpoint creates pending payment records.
+the borrowing endpoint creates pending payment records. The success endpoint
+retrieves the session from Stripe and marks a payment `PAID` only after Stripe
+confirms it. The cancel endpoint leaves it pending and explains that the same
+Checkout link remains available for 24 hours. Confirmed payments also queue an
+administrator Telegram notification with the borrowing and amount details.
 
 ## Stripe test setup
 
 Copy `.env.sample` to `.env` and set `STRIPE_SECRET_KEY` to a Stripe test-mode
 secret key (`sk_test_...`). New borrowings create one hosted Checkout line item
-in USD. The sample success and cancel URLs are temporary placeholders; the next
-payment task will connect them to the API endpoints. Tests mock Stripe and do
-not require a Stripe account or make external requests. Never add a live key or
-any Stripe secret to Git.
+in USD. Stripe success and cancel URLs are built from the API request and named
+routes. Tests mock Stripe and do not require a Stripe account or make external
+requests. Never add a live key or any Stripe secret to Git.
 
 For the manual learning step, create a Checkout Session with Stripe's Python
 SDK in test mode, then create a `Payment` in Django admin using that session's
