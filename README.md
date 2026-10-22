@@ -39,7 +39,16 @@ runs in a Celery worker, so the API request does not wait for Telegram.
 
 The `--pool=solo` option is for local development on Windows. The notification
 tests mock Telegram requests and do not require a bot token or live Telegram
-chat. Scheduled overdue notifications are tracked as a separate project task.
+chat.
+
+Celery Beat checks overdue borrowings every day at 09:00 UTC. It queues one
+message for each borrowing whose expected return date is today or earlier and
+that has not been returned. When none are overdue, it queues
+`No borrowings overdue today!`. Run one scheduler process in another terminal:
+
+```shell
+celery -A config beat --loglevel=INFO
+```
 
 ## Local setup
 
