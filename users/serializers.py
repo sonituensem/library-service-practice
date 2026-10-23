@@ -15,7 +15,9 @@ def normalize_unique_email(value, instance=None):
     if instance is not None:
         users = users.exclude(pk=instance.pk)
     if users.exists():
-        raise serializers.ValidationError("A user with this email already exists.")
+        raise serializers.ValidationError(
+            "A user with this email already exists."
+        )
     return email
 
 
@@ -70,7 +72,9 @@ class UserProfileSerializer(serializers.ModelSerializer):
             try:
                 validate_password(attrs["password"], user=candidate)
             except DjangoValidationError as exc:
-                raise serializers.ValidationError({"password": exc.messages}) from exc
+                raise serializers.ValidationError(
+                    {"password": exc.messages}
+                ) from exc
         return attrs
 
     def update(self, instance, validated_data):

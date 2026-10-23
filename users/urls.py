@@ -1,7 +1,10 @@
 """URL configuration for user registration and authentication endpoints."""
 
 from django.urls import path
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.views import (
+    TokenObtainPairView,
+    TokenRefreshView,
+)
 
 from users.views import UserProfileView, UserRegistrationView
 

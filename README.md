@@ -240,6 +240,16 @@ Each response includes the borrower id, borrowing dates, and a nested `book`
 object with the book's current inventory information, plus the associated
 payment records.
 
+The list endpoint accepts two optional query parameters. Use
+`?is_active=true` to show borrowings that have not been returned
+(`actual_return_date` is null), or `?is_active=false` to show returned
+borrowings. Staff users can use `?user_id=<id>` to show records for one user;
+this parameter is ignored for non-staff users, who continue to see only their
+own records. The filters can be combined, for example
+`/api/borrowings/?user_id=7&is_active=true`. `is_active` must be `true` or
+`false`; invalid values and invalid staff `user_id` values return `400 Bad
+Request`. Swagger documents both query parameters on the borrowing list route.
+
 ## Payments API
 
 | Method | Endpoint | Purpose | Access |
