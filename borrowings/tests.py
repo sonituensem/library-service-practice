@@ -105,6 +105,107 @@ class BorrowingReadAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 2)
 
+    def test_staff_can_filter_borrowings_by_user_id(self):
+        self.authenticate_as(self.librarian)
+
+        response = self.client.get(
+            self.list_url,
+            {"user_id": self.other_reader.id},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            [item["id"] for item in response.data],
+            [self.other_borrowing.id],
+        )
+
+    def test_staff_user_id_filter_must_be_a_positive_integer(self):
+        self.authenticate_as(self.librarian)
+
+        response = self.client.get(self.list_url, {"user_id": "invalid"})
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("user_id", response.data)
+
+    def test_non_staff_user_id_filter_is_ignored(self):
+        self.authenticate_as(self.reader)
+
+        response = self.client.get(
+            self.list_url,
+            {"user_id": self.other_reader.id},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            [item["id"] for item in response.data],
+            [self.borrowing.id],
+        )
+
+    def test_is_active_true_filters_out_returned_borrowings(self):
+        returned_borrowing = self.create_borrowing(
+            self.reader,
+            actual_return_date=date(2026, 1, 7),
+        )
+        self.authenticate_as(self.librarian)
+
+        response = self.client.get(self.list_url, {"is_active": "true"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertCountEqual(
+            [item["id"] for item in response.data],
+            [self.borrowing.id, self.other_borrowing.id],
+        )
+        self.assertNotIn(
+            returned_borrowing.id,
+            [item["id"] for item in response.data],
+        )
+
+    def test_is_active_false_returns_only_returned_borrowings(self):
+        returned_borrowing = self.create_borrowing(
+            self.reader,
+            actual_return_date=date(2026, 1, 7),
+        )
+        self.authenticate_as(self.librarian)
+
+        response = self.client.get(self.list_url, {"is_active": "false"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            [item["id"] for item in response.data],
+            [returned_borrowing.id],
+        )
+
+    def test_is_active_filter_rejects_values_other_than_true_or_false(self):
+        self.authenticate_as(self.reader)
+
+        response = self.client.get(self.list_url, {"is_active": "yes"})
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("is_active", response.data)
+
+    def test_openapi_documents_borrowing_list_filters(self):
+        response = self.client.get("/api/schema/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        parameters = response.data["paths"]["/api/borrowings/"]["get"][
+            "parameters"
+        ]
+        parameters_by_name = {
+            parameter["name"]: parameter for parameter in parameters
+        }
+        self.assertEqual(
+            parameters_by_name["is_active"]["schema"]["type"],
+            "boolean",
+        )
+        self.assertEqual(
+            parameters_by_name["user_id"]["schema"]["type"],
+            "integer",
+        )
+        self.assertIn(
+            "Staff only",
+            parameters_by_name["user_id"]["description"],
+        )
+
     @patch("borrowings.serializers.create_payment_for_borrowing")
     def test_authenticated_user_can_create_borrowing_and_reserve_copy(
         self, mock_create_payment

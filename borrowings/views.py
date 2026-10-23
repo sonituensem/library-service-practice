@@ -3,7 +3,12 @@
 from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
-from drf_spectacular.utils import OpenApiResponse, extend_schema
+from drf_spectacular.utils import (
+    OpenApiParameter,
+    OpenApiResponse,
+    OpenApiTypes,
+    extend_schema,
+)
 from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
@@ -47,10 +52,64 @@ class BorrowingViewSet(
         queryset = super().get_queryset()
         user = self.request.user
         if getattr(user, "is_staff", False):
-            return queryset
-        if not getattr(user, "is_authenticated", False):
+            if self.action == "list":
+                user_id = self.request.query_params.get("user_id")
+                if user_id:
+                    try:
+                        user_id = int(user_id)
+                    except ValueError as exc:
+                        raise ValidationError(
+                            {"user_id": "Must be a positive integer."}
+                        ) from exc
+                    if user_id <= 0:
+                        raise ValidationError(
+                            {"user_id": "Must be a positive integer."}
+                        )
+                    queryset = queryset.filter(user_id=user_id)
+        elif not getattr(user, "is_authenticated", False):
             return queryset.none()
-        return queryset.filter(user=user)
+        else:
+            queryset = queryset.filter(user=user)
+
+        if self.action == "list":
+            is_active = self.request.query_params.get("is_active")
+            if is_active is not None:
+                is_active = is_active.lower()
+                if is_active not in {"true", "false"}:
+                    raise ValidationError(
+                        {"is_active": "Use 'true' or 'false'."}
+                    )
+                queryset = queryset.filter(
+                    actual_return_date__isnull=(is_active == "true")
+                )
+
+        return queryset
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="is_active",
+                type=OpenApiTypes.BOOL,
+                location=OpenApiParameter.QUERY,
+                description=(
+                    "Filter by return status: true for not-yet-returned "
+                    "borrowings, false for returned borrowings."
+                ),
+            ),
+            OpenApiParameter(
+                name="user_id",
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                description=(
+                    "Staff only: restrict results to this user. Ignored "
+                    "for non-staff users."
+                ),
+            ),
+        ]
+    )
+    def list(self, request, *args, **kwargs):
+        """List visible borrowings with optional query filters."""
+        return super().list(request, *args, **kwargs)
 
     @extend_schema(
         request=None,
